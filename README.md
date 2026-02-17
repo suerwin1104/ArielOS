@@ -83,6 +83,16 @@ python ariel_main.py
 
 建議在三星平板上開啟「阻斷所有干擾」模式，並確保 Termux 的「電池最佳化」已關閉，以維持連線穩定。
 
+## 🧠 靈魂設定 (Soul Configuration)
+
+本系統不硬編碼任何 AI 人格。您可以透過修改 `memory/` 目錄下的檔案來賦予 AI 生命：
+
+1. **IDENTITY.md**: 寫入 AI 的名字、說話語氣與性格。
+2. **USER.md**: 寫入主人的稱呼與偏好。
+
+### 如何快速設定？
+在 Discord 中對 Bot 輸入 **「初始化」**，系統將引導您完成初步的人格設定。
+
 \## 🔐 認證與擴充
 
 參考 OpenClaw 邏輯，本系統支援：
@@ -90,6 +100,7 @@ python ariel_main.py
 1\.  \*\*Local/Bridge 模式:\*\* 完全私有化，不經由第三方雲端。
 
 2\.  \*\*API/OAuth 模式:\*\* 預留 Model Resolver 接口，支援 Google Antigravity OAuth 認證。
+
 
 
 
