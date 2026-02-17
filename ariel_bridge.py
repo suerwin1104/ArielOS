@@ -2,65 +2,63 @@ from flask import Flask, request, jsonify
 import os, subprocess
 
 app = Flask(__name__)
+
+# 📝 設定：請確保此路徑與您的 OpenClaw 工作區一致
 ROOT_DIR = r"C:\Users\USER\.openclaw\workspace"
 
 @app.route('/v1/chat/completions', methods=['POST'])
 def chat():
     try:
         data = request.json
+        # 接收來自 Docker 端的「動態靈魂」與「環境背景」
+        soul = data.get('soul', '妳是一位專業的 AI 助手。')
+        time_ctx = data.get('time_context', '')
         prompt = data['messages'][-1]['content']
-        # 只要日誌有出現這一行，就代表 Docker 有成功連過來
-        print(f"📡 [連線成功] 收到指令: {prompt}")
+        
+        print(f"📡 接收請求 | 長度: {len(prompt)} | 包含人格: {'是' if soul else '否'}")
 
-        # --- 📂 邏輯 B：【小腦模式】當指令包含「小腦」時，執行本地檔案任務 ---
+        # --- 📂 邏輯 A：【小腦工具層】僅在明確指名時觸發 ---
         if "小腦" in prompt:
-            print(f"📁 啟動本地小腦邏輯...")
             clean_prompt = prompt.replace("小腦", "").strip()
-
-            # 復原您最滿意的 LS (目錄) 邏輯
+            
+            # 1. 目錄清單 (ls)
             if any(k in clean_prompt for k in ["目錄", "清單", "資料夾", "有哪些"]):
                 files = os.listdir(ROOT_DIR)
-                file_list = "\n".join([f"📁 {f}" if os.path.isdir(os.path.join(ROOT_DIR, f)) else f"📄 {f}" for f in files])
-                reply = f"🏠 【小腦回報：本地目錄】\n{file_list}"
+                reply = "\n".join([f"📁 {f}" if os.path.isdir(os.path.join(ROOT_DIR, f)) else f"📄 {f}" for f in files])
+                return jsonify({"choices": [{"message": {"content": f"🏠 本地目錄回報：\n{reply}"}}]})
             
-            # 復原您最滿意的 CAT (讀取) 邏輯
-            elif "讀取" in clean_prompt or "內容" in clean_prompt:
-                target_file = None
-                for f in os.listdir(ROOT_DIR):
-                    if f in clean_prompt: target_file = f
-                
-                if not target_file:
-                    reply = "💡 小腦找不到檔案，請指名檔名。"
-                else:
-                    file_path = os.path.join(ROOT_DIR, target_file)
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        reply = f"🏠 【小腦讀取：{target_file}】\n\n{f.read()[:1800]}"
-            else:
-                reply = "💡 小腦在線，目前僅支援目錄清單與檔案讀取。"
+            # 2. 檔案讀取 (cat)
+            elif any(k in clean_prompt for k in ["讀取", "內容"]):
+                target = next((f for f in os.listdir(ROOT_DIR) if f in clean_prompt), None)
+                if target:
+                    with open(os.path.join(ROOT_DIR, target), 'r', encoding='utf-8') as f:
+                        return jsonify({"choices": [{"message": {"content": f.read()[:1800]}}]})
             
-            return jsonify({"choices": [{"message": {"content": f"{reply}\n\n來源: [Win11 小腦]"}}]})
+            # 💡 隱藏邏輯：如果只說「小腦」但沒指令，不回廢話，直接讓它滑入大腦對話模式
 
-        # --- 🧠 邏輯 A：【預設模式】不包含小腦時，強制全部走大腦 ---
-        else:
-            print(f"🧠 召喚大腦 Gemini 3 Flash...")
-            # 修正：移除所有干擾，直接拋給 main 代理人
-            command = f'openclaw agent --agent main -m "{prompt}" --no-color'
-            process = subprocess.run(command, capture_output=True, text=True, encoding='utf-8', shell=True, timeout=90)
-            
-            answer = process.stdout.strip() or process.stderr.strip()
-            
-            if len(answer) > 1900:
-                answer = answer[:1900] + "\n\n(內容過長已裁切)"
-                
-            return jsonify({"choices": [{"message": {"content": f"{answer}\n\n來源: [Win11 大腦]"}}]})
+        # --- 🧠 邏輯 B：【大腦對話層】注入人格，由 Gemini 3 全權負責 ---
+        # 構造 OpenClaw 最終指令：人格 + 時間 + 用戶問題
+        full_input = f"{soul}\n\n{time_ctx}\n\n用戶指令：{prompt}"
+        
+        # 執行 OpenClaw (確保使用 main 代理人)
+        command = f'openclaw agent --agent main -m "{full_input}" --no-color'
+        process = subprocess.run(command, capture_output=True, text=True, encoding='utf-8', shell=True)
+        
+        answer = process.stdout.strip() or process.stderr.strip()
+        
+        # 裁切過長內容，確保 Discord 傳輸成功
+        if len(answer) > 1900:
+            answer = answer[:1900] + "\n\n(✨ 內容過長已自動截斷)"
+
+        return jsonify({"choices": [{"message": {"content": answer}}]})
         
     except Exception as e:
         print(f"❌ 錯誤: {str(e)}")
-        return jsonify({"choices": [{"message": {"content": f"❌ 橋接器執行異常：{str(e)}"}}]})
+        return jsonify({"choices": [{"message": {"content": f"🚨 橋接器暫時異常：{str(e)}"}}]})
 
 if __name__ == '__main__':
     print("="*50)
-    print("🚀 Ariel Bridge [預設大腦模式 - 啟動中]")
-    print(f"📂 本地工作區：{ROOT_DIR}")
+    print("🚀 Ariel Bridge [GitHub 專業版] 啟動成功")
+    print("✨ 特點：動態人格注入、無感工具切換、Gemini 3 核心驅動")
     print("="*50)
     app.run(host='0.0.0.0', port=28888)
