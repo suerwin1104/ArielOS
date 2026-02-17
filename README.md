@@ -21,6 +21,29 @@ PowerShell
 ./install_bridge.ps1
 此腳本會自動將橋接器整合進您的 .openclaw 環境中。
 
+🧠 Ariel OS：雲端大腦連線指南 (OpenClaw 聯動)
+本系統透過 Win11 本地橋接器 (Ariel Bridge) 實現 Docker 環境與主機端 OpenClaw 算力的完美對接。
+
+1. 技術架構
+用戶端 (Ariel-Docker): 發送指令至 Tailscale IP:28888。
+
+橋接器 (Ariel-Bridge): 運行於 Win11，負責過濾關鍵字並調度任務。
+
+核心大腦 (OpenClaw CLI): 執行 main 代理人，調用 gemini-3-flash 進行深度推理。
+
+2. 如何觸發大腦模式
+指令中只要包含 「大腦」 關鍵字，系統會自動切換至雲端模式，將需求拋接給 OpenClaw。
+
+範例指令：大腦，分析今日台灣前 3 條重大新聞
+
+回傳限制：自動處理 Discord 2000 字元上限，超過部分將進行安全截斷。
+
+3. 本地導航模式 (Legacy Success Mode)
+若指令涉及檔案操作，橋接器將直接在主機硬碟執行任務，不消耗雲端 Token。
+
+列出目錄：指令包含「有哪些、目錄、清單」。
+
+讀取內容：指令包含「讀取、內容」。
 
 \## 🔐 認證與擴充
 
@@ -29,5 +52,6 @@ PowerShell
 1\.  \*\*Local/Bridge 模式:\*\* 完全私有化，不經由第三方雲端。
 
 2\.  \*\*API/OAuth 模式:\*\* 預留 Model Resolver 接口，支援 Google Antigravity OAuth 認證。
+
 
 
