@@ -14,6 +14,12 @@ Ariel OS Lite 是一個基於「大小腦架構」的輕量化個人 AI 助理�
 
 \* \*\*🔗 算力共享橋接器:\*\* 獨有的本地橋接設計，讓您的手機也能擁有桌機等級的推理能力，且無需支付高額 API 費用。
 
+🖥️ 遠端大腦端 (Windows / OpenClaw) 安裝
+若要將 Win OS 的 OpenClaw 作為大腦，請在 Win OS 下載本倉庫後，執行：
+
+PowerShell
+./install_bridge.ps1
+此腳本會自動將橋接器整合進您的 .openclaw 環境中。
 
 
 \## 🔐 認證與擴充
@@ -23,4 +29,5 @@ Ariel OS Lite 是一個基於「大小腦架構」的輕量化個人 AI 助理�
 1\.  \*\*Local/Bridge 模式:\*\* 完全私有化，不經由第三方雲端。
 
 2\.  \*\*API/OAuth 模式:\*\* 預留 Model Resolver 接口，支援 Google Antigravity OAuth 認證。
+
 
