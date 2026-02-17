@@ -45,6 +45,44 @@ PowerShell
 
 讀取內容：指令包含「讀取、內容」。
 
+📱 Android 平板 / 手機安裝指南 (救火隊模式)
+當您的主力伺服器或 Docker 環境不可用時，您可以將 Android 設備 (推薦使用三星 S9 平板等高效能設備) 變身為緊急指揮中心。
+
+1. 準備環境
+由於 Android 不直接支援標準 Docker，我們使用 Termux 作為運行環境：
+
+從 F-Droid 下載並安裝 Termux。
+
+安裝 Tailscale Android App 並登入，確保設備能連通 Win11 橋接器。
+
+2. 一鍵快速部署
+在 Termux 中複製並貼上以下指令，自動完成環境搭建：
+
+Bash
+# 更新系統與安裝必要套件
+pkg update -y && pkg upgrade -y
+pkg install python git -y
+
+# 克隆專案 (請替換為您的倉庫網址)
+git clone https://github.com/您的帳號/ArielOS.git
+cd ArielOS
+
+# 安裝 Python 依賴
+pip install discord.py requests python-dotenv
+3. 配置與啟動
+修改環境變數：
+使用 nano .env 指令，將您的 Discord Bot Token 與 Win11 Tailscale IP 填入。
+
+執行 Ariel：
+
+Bash
+python ariel_main.py
+💡 注意事項：
+
+平板端執行的是「通訊與邏輯層」，複雜的大腦推理（Gemini 3 Flash）仍會透過網路由 Win11 端處理。
+
+建議在三星平板上開啟「阻斷所有干擾」模式，並確保 Termux 的「電池最佳化」已關閉，以維持連線穩定。
+
 \## 🔐 認證與擴充
 
 參考 OpenClaw 邏輯，本系統支援：
@@ -52,6 +90,7 @@ PowerShell
 1\.  \*\*Local/Bridge 模式:\*\* 完全私有化，不經由第三方雲端。
 
 2\.  \*\*API/OAuth 模式:\*\* 預留 Model Resolver 接口，支援 Google Antigravity OAuth 認證。
+
 
 
 
