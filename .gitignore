@@ -1,3 +1,48 @@
-﻿ollama_data/
+# ⚠️ ArielOS 專屬敏感資料防護 ⚠️
+
+# 1. 防止上傳 API 密鑰與 Token
 .env
+*.env
+
+# 2. 防止上傳個人隱私記憶與知識庫
+Shared_Vault/**
+!Shared_Vault/
+memory/
+[Mm][Ee][Mm][Oo][Rr][Yy]/
+*.[Mm][Dd]
+*.[Mm][Ee][Mm]
+!README.md
+!readme.md
+![Rr][Ee][Aa][Dd][Mm][Ee].[Mm][Dd]
+
+# 3. 防止上傳舊版代理人的私人記憶
+Ariel_Agent_1/memory/
+Ariel_Agent_2/memory/
+cache_buffer.json
+
+# 4. 防止上傳系統日誌與自動備份
+Central_Bridge/logs/
+backups/
+
+# 5. Python 暫存與虛擬環境
 __pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
+*.log
+
+# 6. IDE 與系統隱藏檔
+.vscode/
+.idea/
+.arielos/
+.DS_Store
+Thumbs.db
+
+# 7. 備用與暫存檔 (如 .bak)
+*.bak
+ariel_bridge.py.bak
+README.md.bak
+ariel_main.py.bak

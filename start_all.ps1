@@ -1,0 +1,1 @@
+Set-Location "C:\Users\USER\Ariel_System"; Start-Process powershell -ArgumentList '-NoExit -Command "cd ''C:\Users\USER\Ariel_System\Central_Bridge''; python ariel_bridge.py"'; Start-Sleep -Seconds 5; python ariel_launcher.py --agents

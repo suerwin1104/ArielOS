@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ArielOS 戰情室</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-color: #e2e8f0;
+            --accent-color: #38bdf8;
+            --column-bg: #1e293b80;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Segoe UI', sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            color: var(--accent-color);
+            margin-bottom: 30px;
+        }
+
+        .board {
+            display: flex;
+            flex-wrap: wrap;
+            /* ADDED: allow wrapping for responsive layout */
+            gap: 20px;
+            align-items: flex-start;
+        }
+
+        .column {
+            flex: 1 1 300px;
+            /* ADDED: responsive flex basis */
+            min-width: 300px;
+            background: var(--column-bg);
+            border-radius: 12px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            min-height: 200px;
+        }
+
+        .column-header {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 10px;
+        }
+
+        .task-list {
+            flex: 1;
+            min-height: 100px;
+        }
+
+        .task-card {
+            background: var(--card-bg);
+            padding: 10px 12px;
+            /* reduced for list view */
+            margin-bottom: 8px;
+            /* tighter spacing */
+            border-radius: 6px;
+            cursor: grab;
+            border-left: 4px solid var(--accent-color);
+            transition: transform 0.2s, box-shadow 0.2s;
+            position: relative;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+            /* Make it a compact layout */
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .task-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        .task-meta {
+            display: flex;
+            justify-content: flex-start;
+            gap: 8px;
+            align-items: center;
+            font-size: 0.75rem;
+            color: #94a3b8;
+        }
+
+        .agent-badge {
+            background: #334155;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: #1e293b;
+            padding: 30px;
+            border-radius: 16px;
+            width: 400px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .modal h3 {
+            margin-top: 0;
+            color: var(--accent-color);
+        }
+
+        label {
+            display: block;
+            margin-top: 15px;
+            margin-bottom: 5px;
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }
+
+        input,
+        select {
+            width: 100%;
+            padding: 10px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            color: white;
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+
+        input:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        .btn-group {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 25px;
+        }
+
+        button {
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: opacity 0.2s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        button.primary {
+            background: var(--accent-color);
+            color: #0f172a;
+        }
+
+        button.secondary {
+            background: #475569;
+            color: white;
+        }
+
+        button.danger {
+            background: #ef4444;
+            color: white;
+            width: 100%;
+            margin-top: 15px;
+        }
+
+        .add-btn {
+            position: fixed;
+            bottom: 40px;
+            right: 40px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            color: #0f172a;
+            font-size: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 15px rgba(56, 189, 248, 0.5);
+            cursor: pointer;
+            border: none;
+            transition: transform 0.2s;
+        }
+
+        .add-btn:hover {
+            transform: scale(1.1);
+        }
+
+        .task-card.priority-high {
+            border-left-color: #ef4444;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.2);
+        }
+
+        .task-card.priority-medium {
+            border-left-color: #38bdf8;
+        }
+
+        .task-card.priority-low {
+            border-left-color: #22c55e;
+        }
+
+        .brain-icon {
+            font-size: 1.2rem;
+            margin-right: 5px;
+        }
+
+        .delete-btn {
+            position: absolute;
+            top: 10px;
+            right: 12px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            opacity: 0.5;
+            transition: opacity 0.2s;
+        }
+
+        .task-card:hover .delete-btn {
+            opacity: 1;
+        }
+
+        .column.drag-over {
+            background: rgba(56, 189, 248, 0.2);
+            border-color: var(--accent-color);
+        }
+    </style>
+</head>
+
+<body>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h1 style="margin: 0; flex: 1; text-align: center;">🚀 ArielOS 本日戰情室</h1>
+        <button class="secondary" onclick="openHistoryModal()">⏳ 歷史紀錄</button>
+    </div>
+
+    <div class="board">
+        <div class="column" ondrop="drop(event)" ondragover="allowDrop(event)" ondragenter="dragEnter(event)"
+            ondragleave="dragLeave(event)" data-status="todo">
+            <div class="column-header" style="color: #cbd5e1;">To Do</div>
+            <div class="task-list" id="list-todo"></div>
+        </div>
+        <div class="column" ondrop="drop(event)" ondragover="allowDrop(event)" ondragenter="dragEnter(event)"
+            ondragleave="dragLeave(event)" data-status="doing">
+            <div class="column-header" style="color: #38bdf8;">Doing</div>
+            <div class="task-list" id="list-doing"></div>
+        </div>
+        <div class="column" ondrop="drop(event)" ondragover="allowDrop(event)" ondragenter="dragEnter(event)"
+            ondragleave="dragLeave(event)" data-status="done">
+            <div class="column-header" style="color: #4ade80;">Done</div>
+            <div class="task-list" id="list-done"></div>
+        </div>
+        <!-- Phase 6: Explicit Handoff Column -->
+        <div class="column" ondrop="drop(event)" ondragover="allowDrop(event)" ondragenter="dragEnter(event)"
+            ondragleave="dragLeave(event)" data-status="waiting_for_user">
+            <div class="column-header" style="color: #f59e0b;">Waiting (Handoff)</div>
+            <div class="task-list" id="list-waiting_for_user"></div>
+        </div>
+    </div>
+
+    <button class="add-btn" onclick="openAddModal()">+</button>
+
+    <!-- Modal -->
+    <div class="modal" id="taskModal">
+        <div class="modal-content">
+            <h3 id="modalTitle">新增任務</h3>
+            <input type="hidden" id="taskId">
+
+            <label>任務內容 (AI 將自動分析)</label>
+            <input type="text" id="taskInput" placeholder="輸入任務標題...">
+
+            <label>指派 Agent</label>
+            <select id="agentSelect">
+                <option value="agent1">Agent 1 (Jessie)</option>
+                <option value="agent2">Agent 2 (Mandy)</option>
+            </select>
+
+            <label>狀態</label>
+            <select id="statusSelect">
+                <option value="todo">To Do</option>
+                <option value="doing">Doing</option>
+                <option value="done">Done</option>
+                <option value="waiting_for_user">Waiting (Handoff)</option>
+            </select>
+
+            <div class="btn-group">
+                <button class="secondary" onclick="closeModal()">取消</button>
+                <button class="primary" onclick="saveTask()">儲存</button>
+            </div>
+            <button class="danger" id="delBtn" onclick="deleteTask()" style="display: none;">刪除任務</button>
+        </div>
+    </div>
+
+    <!-- History Modal -->
+    <div class="modal" id="historyModal">
+        <div class="modal-content" style="width: 800px; max-width: 90vw; max-height: 80vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3 style="margin: 0; color: #cbd5e1;">⏳ 歷史任務紀錄</h3>
+                <button onclick="closeHistoryModal()"
+                    style="background: none; border: none; color: white; cursor: pointer; font-size: 1.5rem;">&times;</button>
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <input type="text" id="historySearch" placeholder="搜尋歷史任務名稱..." onkeyup="renderHistory()"
+                    style="width: 100%;">
+            </div>
+
+            <div id="historyList" style="display: flex; flex-direction: column; gap: 10px;">
+                <!-- History items will be rendered here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '/v1/kanban/tasks';
+        let currentTasks = [];
+
+        // Check if a date string is today
+        function isToday(dateString) {
+            if (!dateString) return true; // Show tasks without dates just in case
+            const today = new Date();
+            const date = new Date(dateString);
+            return date.getDate() === today.getDate() &&
+                date.getMonth() === today.getMonth() &&
+                date.getFullYear() === today.getFullYear();
+        }
+
+        async function loadTasks() {
+            try {
+                const res = await fetch(API_URL);
+                const data = await res.json();
+                currentTasks = Array.isArray(data) ? data : [];
+                render();
+            } catch (e) {
+                console.error("Failed to load tasks", e);
+            }
+        }
+
+        function render() {
+            ['todo', 'doing', 'done', 'waiting_for_user'].forEach(s => {
+                const el = document.getElementById(`list-${s}`);
+                if (el) el.innerHTML = '';
+            });
+
+            const todayTasks = currentTasks.filter(t => isToday(t.created_at));
+
+            todayTasks.forEach(t => {
+                const status = ['todo', 'doing', 'done', 'waiting_for_user'].includes(t.status) ? t.status : 'todo';
+                const col = document.getElementById(`list-${status}`);
+
+                const card = document.createElement('div');
+                card.className = `task-card priority-${t.priority || 'medium'}`;
+                card.draggable = true;
+                card.ondragstart = (e) => drag(e, t.id);
+                card.onclick = (e) => {
+                    if (card.classList.contains('dragging')) return;
+                    openEditModal(t);
+                };
+
+                const dateStr = t.created_at ? new Date(t.created_at).toLocaleDateString() : '';
+                const brainIcon = t.brain === 'cerebrum' ? '🧠' : '⚡';
+
+                // Logs / Status Indicator
+                let statusHtml = '';
+                if (t.status === 'doing') {
+                    statusHtml = '<span style="color: #38bdf8; font-size: 0.8rem;">⚡ Running...</span>';
+                } else if (t.status === 'done' && t.logs) {
+                    statusHtml = `<button onclick="alert('${t.logs.replace(/\n/g, '\\n').replace(/'/g, "\\'")}')" style="background:none; border:none; color: #4ade80; cursor:pointer; padding:0;">📜 View Logs</button>`;
+                } else if (t.status === 'waiting_for_user' && t.logs) {
+                    statusHtml = `<button onclick="alert('${t.logs.replace(/\n/g, '\\n').replace(/'/g, "\\'")}')" style="background:none; border:none; color: #f59e0b; cursor:pointer; padding:0;">⚠️ Handoff Info</button>`;
+                }
+
+                card.innerHTML = `
+                    <span class="delete-btn" onclick="deleteTaskById('${t.id}', event)">🗑️</span>
+                    <div style="font-weight: 500; font-size: 0.95rem; display: flex; align-items: flex-start; padding-right: 25px;">
+                        <span class="brain-icon" title="${t.brain}">${brainIcon}</span>
+                        <span style="line-height: 1.4;">${t.title}</span>
+                    </div>
+                    <div class="task-meta">
+                        <span class="agent-badge">${t.agent_id}</span>
+                        <span>${statusHtml}</span>
+                        <span style="margin-left: auto;">${dateStr}</span>
+                    </div>
+                `;
+                col.appendChild(card);
+            });
+        }
+
+        // Drag & Drop
+        function allowDrop(ev) { ev.preventDefault(); }
+
+        function dragEnter(ev) {
+            ev.preventDefault();
+            ev.currentTarget.classList.add('drag-over');
+        }
+
+        function dragLeave(ev) {
+            ev.preventDefault();
+            ev.currentTarget.classList.remove('drag-over');
+        }
+
+        function drag(ev, id) {
+            ev.dataTransfer.setData("text", id);
+            ev.target.classList.add('dragging');
+        }
+
+        async function drop(ev) {
+            ev.preventDefault();
+            // Remove highlighting
+            document.querySelectorAll('.column').forEach(c => c.classList.remove('drag-over'));
+            document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+
+            const id = ev.dataTransfer.getData("text");
+            // Use currentTarget which is the .column div (safe & robust)
+            const status = ev.currentTarget.dataset.status;
+
+            if (!status || !id) return;
+
+            // Optimistic update
+            const task = currentTasks.find(t => t.id === id);
+            if (task && task.status !== status) {
+                const oldStatus = task.status;
+                task.status = status;
+                render();
+
+                try {
+                    await fetch(`${API_URL}/${id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status })
+                    });
+                    loadTasks(); // Sync
+                } catch (e) {
+                    // Revert on error
+                    console.error('Update failed', e);
+                    task.status = oldStatus;
+                    render();
+                    alert('更新失敗，請檢查網路');
+                }
+            }
+        }
+
+        // Modal Logic
+        const modal = document.getElementById('taskModal');
+
+        function openAddModal() {
+            document.getElementById('modalTitle').innerText = '新增任務';
+            document.getElementById('taskId').value = '';
+            document.getElementById('taskInput').value = '';
+            document.getElementById('statusSelect').value = 'todo';
+            document.getElementById('delBtn').style.display = 'none';
+            modal.style.display = 'flex';
+            document.getElementById('taskInput').focus();
+        }
+
+        const historyModal = document.getElementById('historyModal');
+
+        function openHistoryModal() {
+            historyModal.style.display = 'flex';
+            renderHistory();
+        }
+
+        function closeHistoryModal() {
+            historyModal.style.display = 'none';
+        }
+
+        function renderHistory() {
+            const listEl = document.getElementById('historyList');
+            const searchTerm = document.getElementById('historySearch').value.toLowerCase();
+
+            listEl.innerHTML = '';
+
+            // Show all tasks, sorted by date descending
+            const sortedTasks = [...currentTasks].sort((a, b) => {
+                const da = a.created_at ? new Date(a.created_at).getTime() : 0;
+                const db = b.created_at ? new Date(b.created_at).getTime() : 0;
+                return db - da; // Descending
+            });
+
+            const filteredTasks = sortedTasks.filter(t =>
+                t.title.toLowerCase().includes(searchTerm) ||
+                (t.agent_id && t.agent_id.toLowerCase().includes(searchTerm))
+            );
+
+            if (filteredTasks.length === 0) {
+                listEl.innerHTML = '<div style="text-align: center; color: #64748b; padding: 20px;">找不到符合的歷史任務</div>';
+                return;
+            }
+
+            filteredTasks.forEach(t => {
+                const dateStr = t.created_at ? new Date(t.created_at).toLocaleString() : '';
+                const statusColors = {
+                    'todo': '#cbd5e1',
+                    'doing': '#38bdf8',
+                    'done': '#4ade80',
+                    'waiting_for_user': '#f59e0b'
+                };
+                const statusColor = statusColors[t.status] || '#cbd5e1';
+
+                let logsBtn = '';
+                if (t.logs) {
+                    logsBtn = `<button onclick="alert('${t.logs.replace(/\n/g, '\\n').replace(/'/g, "\\'")}')" style="background:none; border:none; color: ${statusColor}; cursor:pointer; padding:0; text-decoration: underline;">查看日誌</button>`;
+                }
+
+                const item = document.createElement('div');
+                item.style.background = 'var(--card-bg)';
+                item.style.padding = '12px';
+                item.style.borderRadius = '6px';
+                item.style.borderLeft = `4px solid ${statusColor}`;
+                item.style.display = 'flex';
+                item.style.flexDirection = 'column';
+                item.style.gap = '8px';
+
+                item.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <strong style="font-size: 1.05rem; padding-right: 15px;">${t.title}</strong>
+                        <span style="color: ${statusColor}; font-weight: bold; font-size: 0.8rem; text-transform: uppercase;">${t.status}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: #94a3b8;">
+                        <span class="agent-badge">${t.agent_id}</span>
+                        ${logsBtn}
+                        <span>${dateStr}</span>
+                    </div>
+                `;
+                listEl.appendChild(item);
+            });
+        }
+
+        function openEditModal(task) {
+            document.getElementById('modalTitle').innerText = '編輯任務';
+            document.getElementById('taskId').value = task.id;
+            document.getElementById('taskInput').value = task.title;
+            document.getElementById('agentSelect').value = task.agent_id;
+            document.getElementById('statusSelect').value = task.status;
+            document.getElementById('delBtn').style.display = 'block';
+            modal.style.display = 'flex';
+        }
+
+        function closeModal() { modal.style.display = 'none'; }
+
+        // Close modal if click outside
+        window.onclick = function (event) {
+            if (event.target == modal) {
+                closeModal();
+            }
+            if (event.target == historyModal) {
+                closeHistoryModal();
+            }
+        }
+
+        async function saveTask() {
+            const id = document.getElementById('taskId').value;
+            const title = document.getElementById('taskInput').value;
+            const agent_id = document.getElementById('agentSelect').value;
+            const status = document.getElementById('statusSelect').value;
+
+            if (!title.trim()) return alert('請輸入標題');
+
+            if (id) {
+                await fetch(`${API_URL}/${id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, agent_id, status })
+                });
+            } else {
+                await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, agent_id, status, priority: 'medium' })
+                });
+            }
+            closeModal();
+            loadTasks();
+        }
+
+        async function deleteTask() {
+            const id = document.getElementById('taskId').value;
+            if (confirm('確定刪除此任務?')) {
+                await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+                closeModal();
+                loadTasks();
+            }
+        }
+
+        async function deleteTaskById(id, event) {
+            event.stopPropagation(); // Prevent card click (modal)
+            if (confirm('確定刪除此任務?')) {
+                await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+                loadTasks();
+            }
+        }
+
+        // Init Initial Load
+        loadTasks();
+
+        // Phase 6: Server-Sent Events (SSE) for Real-time Updates
+        const evtSource = new EventSource("/v1/kanban/stream");
+        evtSource.onmessage = function (event) {
+            try {
+                const data = JSON.parse(event.data);
+                if (Array.isArray(data)) {
+                    currentTasks = data;
+                    render();
+                    // Also re-render history if modal is open
+                    if (document.getElementById('historyModal').style.display === 'flex') {
+                        renderHistory();
+                    }
+                }
+            } catch (e) {
+                console.error("SSE parse error", e);
+            }
+        };
+        evtSource.onerror = function (err) {
+            console.error("EventSource failed:", err);
+            // Browser will automatically attempt to reconnect
+        };
+    </script>
+</body>
+
+</html>
