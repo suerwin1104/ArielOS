@@ -3,13 +3,13 @@
  * Based on GAS_EXP.txt
  */
 const CONFIG = {
-    GEMINI_API_KEY: 'AIzaSyCF7n-L2GSZUCqvaH_z-4wjUtx315CKsk0',
-    EXA_API_KEY: '87a47899-40ae-4084-b61a-c34dab3ab4de',
-    GCS_API_KEY: 'AIzaSyALDMC2xS284lX14_lGuNDs7RPuytmWiOs',
-    GCS_CX: 'f746b0b2151384a3a',
-    DISCORD_WEBHOOK_URL: 'https://discord.com/api/webhooks/1474300583661011139/Y8J-25PoiCxDOfSUihMaMnUmHtKh2tarQgzUvZwgb0fJ_WIQB-R-qIME9rdCRlP7w9zn',
+    GEMINI_API_KEY: '***',
+    EXA_API_KEY: '***',
+    GCS_API_KEY: '***',
+    GCS_CX: '***',
+    DISCORD_WEBHOOK_URL: '***',
     SCAN_WINDOW_DAYS: 21,
-    USER_NAME: 'erwin',
+    USER_NAME: '***',
     TIMEZONE: "GMT+8"
 };
 
