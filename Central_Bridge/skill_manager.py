@@ -174,24 +174,33 @@ class SkillManager:
     def find_matching_skill(self, query):
         """
         在已安裝技能 + MCP 目錄中尋找匹配技能。
-        使用關鍵字交叉比對 (不耗 LLM 額度，速度 < 1ms)。
+        使用關鍵字積分比對 (匹配關鍵字總長度最高者勝出)。
         """
         query_lower = query.lower()
         registry = self._load_registry()
 
-        # 1. 先查已安裝技能
-        for skill in registry.get("installed_skills", []):
+        best_skill = None
+        best_score = 0
+
+        all_skills = registry.get("installed_skills", []) + registry.get("mcp_catalog", [])
+        
+        for skill in all_skills:
+            score = 0
             for kw in skill.get("keywords", []):
                 if kw.lower() in query_lower:
-                    return skill
-
-        # 2. 再查 MCP 目錄 (未安裝但可立即安裝)
-        for skill in registry.get("mcp_catalog", []):
-            for kw in skill.get("keywords", []):
-                if kw.lower() in query_lower:
-                    return skill
-
-        return None
+                    score += len(kw) * 10
+                    # 如果關鍵字完全等於輸入，給極高分數
+                    if kw.lower() == query_lower.strip():
+                        score += 1000
+            
+            if score > best_score:
+                best_score = score
+                best_skill = skill
+            elif score == best_score and score > 0:
+                # 遇到平手 (Keyword collision)，交由 LLM 進行精確匹配判斷
+                best_skill = None
+                
+        return best_skill
 
     def find_skill_by_llm(self, query):
         """
@@ -361,7 +370,7 @@ class SkillManager:
             if skill_type == "pip":
                 result = subprocess.run(
                     [sys.executable, "-m", "pip", "install", package],
-                    capture_output=True, text=True, timeout=120
+                    capture_output=True, text=True, encoding='utf-8', timeout=120
                 )
                 if result.returncode != 0:
                     _log(f"❌ pip 安裝失敗: {result.stderr[:200]}")
@@ -384,7 +393,7 @@ class SkillManager:
                 try:
                     result = subprocess.run(
                         test_cmd,
-                        capture_output=True, text=True, timeout=30, # 縮短至 30s，驗證不該太久
+                        capture_output=True, text=True, encoding='utf-8', timeout=30, # 縮短至 30s，驗證不該太久
                         env=env, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
                     )
                     elapsed = time.time() - start_t
@@ -429,11 +438,12 @@ class SkillManager:
             _log(f"❌ 安裝異常: {e}")
             return False
 
-    def execute_skill(self, skill_info, query):
+    def execute_skill(self, skill_info, query, **kwargs):
         """
         執行技能。
         - pip 技能: 直接 Python import + 呼叫
         - MCP 技能: 常駐 subprocess JSON-RPC 或一次性呼叫
+        若有額外參數 (如 gas_url) 將以全大寫的環境變數注入。
         """
         skill_type = skill_info.get("type", "mcp")
         name = skill_info.get("name", "unknown")
@@ -443,15 +453,15 @@ class SkillManager:
 
         try:
             if skill_type == "pip":
-                return self._execute_pip_skill(skill_info, query)
+                return self._execute_pip_skill(skill_info, query, **kwargs)
             elif skill_type in ("mcp", "npm"):
-                return self._execute_mcp_skill(skill_info, query)
+                return self._execute_mcp_skill(skill_info, query, **kwargs)
         except Exception as e:
             _log(f"❌ 技能執行失敗 [{name}]: {e}")
 
         return None
 
-    def _execute_pip_skill(self, skill_info, query):
+    def _execute_pip_skill(self, skill_info, query, **kwargs):
         """直接 import Python 模組執行或執行註冊的本機腳本"""
         package = skill_info.get("package", "")
         name = skill_info.get("name", "")
@@ -460,6 +470,11 @@ class SkillManager:
         # 完全繞過 PowerShell profile 劫持
         env = os.environ.copy()
         env.pop('PSModulePath', None)
+        
+        # 注入動態來源參數 (例如 Agent 傳進來的 gas_url -> GAS_URL)
+        for k, v in kwargs.items():
+            if v:
+                env[k.upper()] = str(v)
 
         # 1. 若有指定本機腳本 (例如自製的 free_weather.py)，優先直接執行
         if run_cmd and run_cmd.startswith("python "):
@@ -468,10 +483,12 @@ class SkillManager:
                 _log(f"🚀 直接執行本機 Python 技能腳本: {script_path}")
                 result = subprocess.run(
                     [sys.executable, script_path, query],
-                    capture_output=True, text=True, timeout=30,
+                    capture_output=True, text=True, encoding='utf-8', timeout=120,
                     env=env, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
                 )
-                output = result.stdout.strip() or result.stderr.strip()
+                stdout = result.stdout or ""
+                stderr = result.stderr or ""
+                output = (stdout + "\n" + stderr).strip()
                 if output:
                     return f"[技能: {name}]\n{output}"
                 else:
@@ -503,7 +520,7 @@ class SkillManager:
         # 在隔離進程中執行
         result = subprocess.run(
             [sys.executable, "-c", code],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True, text=True, encoding='utf-8', timeout=120,
             env=env, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         )
 
@@ -517,7 +534,7 @@ class SkillManager:
 
         return None
 
-    def _execute_mcp_skill(self, skill_info, query):
+    def _execute_mcp_skill(self, skill_info, query, **kwargs):
         """
         MCP 技能執行：使用常駐連線 (效能模式) 或一次性呼叫 (備用)。
         """
@@ -547,7 +564,7 @@ class SkillManager:
 
         # 備用方案：一次性 subprocess 呼叫
         _log(f"🔄 [{name}] 降級至一次性呼叫模式")
-        return self._execute_mcp_oneshot(skill_info, query)
+        return self._execute_mcp_oneshot(skill_info, query, **kwargs)
 
     def _mcp_select_and_call(self, conn, tools, query, skill_name):
         """用小腦選擇 MCP tool 並呼叫"""
@@ -599,7 +616,7 @@ class SkillManager:
 
         return None
 
-    def _execute_mcp_oneshot(self, skill_info, query):
+    def _execute_mcp_oneshot(self, skill_info, query, **kwargs):
         """一次性呼叫 MCP server (備用模式)"""
         import requests
 

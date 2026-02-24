@@ -126,8 +126,8 @@ def _spinal_chord_reflex(query: str, agent_id: str):
 def _cerebellum_style_transfer(raw_answer: str, agent_id: str):
     return cerebellum_style_transfer(raw_answer, agent_id, AGENT_REGISTRY, PE)
 
-def _cerebellum_fast_track_check(query: str, agent_id: str = None):
-    return cerebellum_fast_track_check(query, agent_id or "unknown", AGENT_REGISTRY, PE, SM)
+def _cerebellum_fast_track_check(query: str, agent_id: str = None, **kwargs):
+    return cerebellum_fast_track_check(query, agent_id or "unknown", AGENT_REGISTRY, PE, SM, **kwargs)
 
 def _cerebellum_skill_handler(query: str, skill_desc: str, agent_id: str):
     return cerebellum_skill_handler(query, skill_desc, agent_id, SM, AGENT_REGISTRY, PE)
@@ -476,6 +476,7 @@ def chat():
         user_input = data['messages'][-1]['content']
         agent_id = data.get('agent_id', 'unknown')
         origin = data.get('origin', '')
+        gas_url = data.get('gas_url') or ''
         agent_name = AGENT_REGISTRY.get(agent_id, {}).get('name', '未知')
         log(f"📨 收到來自 [{agent_name}] 的請求{' (看板執行器)' if origin == 'kanban_poller' else ''}")
 
@@ -503,7 +504,7 @@ def chat():
 
         intent_type, fast_ans = (None, None)
         if not ollama_busy:
-            intent_type, fast_ans = _cerebellum_fast_track_check(user_input, agent_id)
+            intent_type, fast_ans = _cerebellum_fast_track_check(user_input, agent_id, gas_url=gas_url)
 
         if intent_type == "SIMPLE":
             log(f"⚡ Fast Track [SIMPLE]: {fast_ans[:20]}...")

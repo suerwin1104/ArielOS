@@ -19,7 +19,7 @@ Write-Host "OK: $py"
 
 # 2. Dependencies
 Write-Host "[2/6] Installing dependencies..."
-$pkgs = @("flask", "waitress", "requests", "discord.py", "aiohttp", "python-dotenv", "qdrant-client", "sentence-transformers", "PyNaCl", "primp", "pandas", "beautifulsoup4")
+$pkgs = @("flask", "waitress", "requests", "discord.py", "aiohttp", "python-dotenv", "qdrant-client", "sentence-transformers", "PyNaCl", "primp", "pandas", "beautifulsoup4", "schedule")
 foreach ($p in $pkgs) {
     Write-Host "Installing $p..."
     pip install $p -q --disable-pip-version-check

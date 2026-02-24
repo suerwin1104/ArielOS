@@ -47,7 +47,7 @@ def _set_cerebellum_simple_cache(cache_key: str, answer: str):
 
 # ── 統一呼叫介面 ──────────────────────────────────────────────────────────────
 
-def cerebellum_call(prompt: str, temperature: float = 0.3, timeout: int = 120,
+def cerebellum_call(prompt: str, temperature: float = 0.3, timeout: int = 180,
                     num_ctx: int = 2048, num_predict: int = 256, model: str = None) -> str:
     """🧠 小腦統一呼叫介面（含 Semaphore 保護、精簡 Context 設定、自動模型降級）
 
@@ -520,7 +520,8 @@ def cerebellum_style_transfer(raw_answer: str, agent_id: str, agent_registry: di
         f"2. 嚴禁加上「好的」、「以下是」等前言。\n"
         f"3. 嚴禁修改原文中的程式碼或關鍵數值資料。\n"
         f"4. 將原文的 'Ariel' 或 'ArielOS' 改為『{agent_name}』。\n"
-        f"5. 直接輸出你改寫後的結果，絕對不要包含任何 Markdown 標記，也不要輸出 JSON。\n\n"
+        f"5. **必須使用繁體中文 (Traditional Chinese) 回答**，即便原文是簡體或英文也必須翻譯潤飾。\n"
+        f"6. 直接輸出你改寫後的結果，絕對不要包含任何 Markdown 標記，也不要輸出 JSON。\n\n"
         f"【待潤飾的原文】\n{raw_answer}"
     )
     try:
@@ -537,7 +538,7 @@ def cerebellum_style_transfer(raw_answer: str, agent_id: str, agent_registry: di
 
 # ── 技能路由 ──────────────────────────────────────────────────────────────────
 
-def cerebellum_skill_handler(query: str, skill_desc: str, agent_id: str, sm, agent_registry: dict, pe) -> str | None:
+def cerebellum_skill_handler(query: str, skill_desc: str, agent_id: str, sm, agent_registry: dict, pe, **kwargs) -> str | None:
     """🔧 Phase 13: 小腦技能路由"""
     matched = sm.find_matching_skill(skill_desc)
     if matched:
@@ -545,7 +546,7 @@ def cerebellum_skill_handler(query: str, skill_desc: str, agent_id: str, sm, age
         installed_names = [s['name'] for s in sm.list_installed()]
         if matched['name'] not in installed_names:
             sm.install_skill(matched)
-        result = sm.execute_skill(matched, query)
+        result = sm.execute_skill(matched, query, **kwargs)
         if result:
             return cerebellum_style_transfer(result, agent_id, agent_registry, pe)
 
@@ -556,7 +557,7 @@ def cerebellum_skill_handler(query: str, skill_desc: str, agent_id: str, sm, age
             installed_names = [s['name'] for s in sm.list_installed()]
             if matched['name'] not in installed_names:
                 sm.install_skill(matched)
-            result = sm.execute_skill(matched, query)
+            result = sm.execute_skill(matched, query, **kwargs)
             if result:
                 return cerebellum_style_transfer(result, agent_id, agent_registry, pe)
 
@@ -566,7 +567,7 @@ def cerebellum_skill_handler(query: str, skill_desc: str, agent_id: str, sm, age
         best = candidates[0]
         log(f"📦 嘗試安裝線上技能: {best['name']}")
         if sm.install_skill(best):
-            result = sm.execute_skill(best, query)
+            result = sm.execute_skill(best, query, **kwargs)
             if result:
                 return cerebellum_style_transfer(result, agent_id, agent_registry, pe)
 
@@ -576,7 +577,7 @@ def cerebellum_skill_handler(query: str, skill_desc: str, agent_id: str, sm, age
 
 # ── Fast Track ────────────────────────────────────────────────────────────────
 
-def cerebellum_fast_track_check(query: str, agent_id: str, agent_registry: dict, pe, sm):
+def cerebellum_fast_track_check(query: str, agent_id: str, agent_registry: dict, pe, sm, **kwargs):
     """🚀 小腦快車道：判斷是否為簡單對話或搜尋"""
     from .personality import _get_time_context
 
@@ -587,18 +588,23 @@ def cerebellum_fast_track_check(query: str, agent_id: str, agent_registry: dict,
             agent_name = agent_registry.get(agent_id, {}).get("name", "Agent")
             persona_context = f"你現在是 {agent_name}，擁有以下特質：\n{soul}\n"
 
+    # ✂️ 移除由 Agent 偷偷注入的系統背景字串 (如行事曆、GAS 資料)，避免干擾意圖判斷
+    pure_query = re.sub(r"\[系統資訊.*?\][\s\S]*?\[結束系統資訊\]\n*", "", query).strip()
+    if not pure_query:
+        pure_query = query
+
     time_context = _get_time_context()
     instruction = (
         "你是一個嚴格的『意圖分類路由器』，負責標籤使用者的提問。\n"
         "你可以參考以下上下文：\n"
         f"{persona_context}{time_context}\n"
-        f"使用者輸入：『{query}』\n"
+        f"使用者輸入：『{pure_query}』\n"
         "請依照以下定義判斷意圖：\n"
         "- [SIMPLE]：打招呼、純聊天、問候、簡單常識。\n"
-        "- [SEARCH]：需要最新網路資訊（天氣、新聞、股價），或是一般的百科知識（食譜、生活常識、事物介紹）。\n"
+        "- [SEARCH]：單純的資訊查詢（如：天氣、匯率、簡單名詞解釋、食譜）。\n"
         "- [PROGRAMMATIC]：針對檔案或資料庫進行大量資料處理、分析。\n"
-        "- [SKILL]：需要特定軟體工具或外掛（例如：執行腳本、操作資料庫、Git指令、時區轉換、安裝套件模組）。不包含日常生活的實體製作！\n"
-        "- [COMPLEX]：程式開發、長篇邏輯推理、系統架構設計、深入探討某個專業議題。\n\n"
+        "- [SKILL]：需要特定軟體工具、外掛或「深度研究分析」（如：執行腳本、操作計畫、分析趨勢、深度報告、時區轉換、整合行事曆與新聞）。\n"
+        "- [COMPLEX]：程式開發、長篇邏輯推理、系統架構設計。即便涉及搜尋，但主要是為了解決複雜的程式邏輯問題。\n\n"
         "【絕對規則】：你不可以進行對話！你只能輸出這五個標籤之一（包含中括號），如果有必要可以加上一句話的描述。\n"
         "範例輸出 1：[SEARCH] 製作香氛蠟燭的方法\n"
         "範例輸出 2：[SKILL] 安裝資料庫連線工具\n"
@@ -606,8 +612,8 @@ def cerebellum_fast_track_check(query: str, agent_id: str, agent_registry: dict,
         "請立刻輸出你的分類："
     )
 
-    # ⚡ 關鍵字前哨
-    q_lower = query.lower().replace(" ", "")
+    # ⚡ 關鍵字前哨 (使用純淨的 User Query 避免被 Context 洗掉)
+    q_lower = pure_query.lower().replace(" ", "")
     
     # 攔截資訊型詢問 (不要把「妳有哪些技能」當作執行技能的意圖)
     info_queries = [
@@ -626,11 +632,13 @@ def cerebellum_fast_track_check(query: str, agent_id: str, agent_registry: dict,
     SKILL_TRIGGERS = [
         "技能", "學習", "安裝套件", "法律", "會計", "財務", "稅務",
         "醫療", "工程", "程式庫", "install", "learn", "skill", "tool",
-        "plugin", "模組", "套件", "功能模組"
+        "plugin", "模組", "套件", "功能模組", "排程", "定時任務",
+        "行程", "預約", "安排", "開會", "行事曆", "信件", "信箱", "email",
+        "schedule", "趨勢", "分析", "研究", "發展"
     ]
     if any(kw in q_lower for kw in SKILL_TRIGGERS):
-        log(f"⚡ [FastTrack] 關鍵字前哨命中 → [SKILL]: '{query[:40]}'")
-        skill_result = cerebellum_skill_handler(query, query, agent_id, sm, agent_registry, pe)
+        log(f"⚡ [FastTrack] 關鍵字前哨命中 → [SKILL]: '{pure_query[:40]}'")
+        skill_result = cerebellum_skill_handler(pure_query, pure_query, agent_id, sm, agent_registry, pe, **kwargs)
         if skill_result:
             return ("SKILL", skill_result)
         log(f"⚠️ [FastTrack] 技能路由失敗，降級至大腦")
@@ -670,7 +678,7 @@ def cerebellum_fast_track_check(query: str, agent_id: str, agent_registry: dict,
         if intent_tag == "SKILL":
             skill_desc = raw_content
             log(f"🔧 偵測到技能需求: {skill_desc}")
-            skill_result = cerebellum_skill_handler(query, skill_desc, agent_id, sm, agent_registry, pe)
+            skill_result = cerebellum_skill_handler(query, skill_desc, agent_id, sm, agent_registry, pe, **kwargs)
             if skill_result:
                 return ("SKILL", skill_result)
             return (None, None)

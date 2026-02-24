@@ -23,6 +23,11 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+# 強制要求終端機輸出為 UTF-8，防止 cp950 編碼錯誤 (如 Emoji)
+import sys
+if sys.stdout.encoding.lower() != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
+
 import discord
 from dotenv import dotenv_values
 

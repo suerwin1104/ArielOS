@@ -1,0 +1,133 @@
+const CONFIG = {
+    GEMINI_API_KEY: 'AIzaSyCF7n-L2GSZUCqvaH_z-4wjUtx315CKsk0',
+    DISCORD_WEBHOOK_URL: 'https://discord.com/api/webhooks/1474300583661011139/Y8J-25PoiCxDOfSUihMaMnUmHtKh2tarQgzUvZwgb0fJ_WIQB-R-qIME9rdCRlP7w9zn',
+    SCAN_WINDOW_DAYS: 21,
+    USER_NAME: 'erwin',
+    TIMEZONE: "GMT+8"
+};
+
+/**
+ * 主動推送功能 (Sentinel)
+ */
+function arielSentinel() {
+    console.log("⏰ Ariel Sentinel 掃描啟動...");
+    const now = new Date();
+    const future = new Date(now.getTime() + (CONFIG.SCAN_WINDOW_DAYS * 24 * 60 * 60 * 1000));
+    let newItems = [];
+
+    const cache = PropertiesService.getScriptProperties();
+    let sentHistory = cache.getProperty('SENT_HISTORY') || "";
+
+    try {
+        // 1. 檢查日曆事件
+        const calendars = CalendarApp.getAllCalendars();
+        calendars.forEach(cal => {
+            try {
+                const events = cal.getEvents(now, future);
+                events.forEach(e => {
+                    const itemID = `EVT_${e.getId()}_${e.getLastUpdated().getTime()}`;
+                    if (sentHistory.indexOf(itemID) === -1) {
+                        const timeStr = Utilities.formatDate(e.getStartTime(), CONFIG.TIMEZONE, "yyyy/MM/dd HH:mm");
+                        newItems.push({ id: itemID, text: `[行程預告] ${e.getTitle()}, 時間: ${timeStr}` });
+                    }
+                });
+            } catch (calErr) {
+                console.error(`[ERROR] 日曆掃描異常: ${cal.getName()}`);
+            }
+        });
+
+        // 2. 檢查 Gmail 未讀郵件
+        try {
+            const threads = GmailApp.search('is:unread', 0, 5);
+            threads.forEach(t => {
+                const itemID = `MAIL_${t.getId()}_${t.getLastMessageDate().getTime()}`;
+                if (sentHistory.indexOf(itemID) === -1) {
+                    newItems.push({ id: itemID, text: `[新信通知] 寄件者: ${t.getMessages()[0].getFrom()}, 標題: ${t.getFirstMessageSubject()}` });
+                }
+            });
+        } catch (mailErr) {
+            console.error(`[ERROR] 郵件掃描異常: ${mailErr}`);
+        }
+
+        // 3. 處理與發送
+        if (newItems.length > 0) {
+            const reportContext = newItems.map(item => item.text).join("\n");
+            let arielSpeech = "";
+            try {
+                arielSpeech = callGeminiAI(reportContext);
+            } catch (aiErr) {
+                console.error(`[AI 失敗] ${aiErr.message}`);
+                arielSpeech = `⚠️ AI 處理失敗（原因：${aiErr.message}）\n\n原始摘要：\n` + reportContext;
+            }
+
+            sendToDiscord(arielSpeech);
+
+            const newIDs = newItems.map(item => item.id).join(",");
+            sentHistory = (sentHistory ? sentHistory + "," : "") + newIDs;
+            const historyArray = sentHistory.split(",");
+            if (historyArray.length > 200) {
+                sentHistory = historyArray.slice(-200).join(",");
+            }
+            cache.setProperty('SENT_HISTORY', sentHistory);
+            console.log("[SUCCESS] 通知已推送至 Discord。");
+        } else {
+            console.log("[INFO] 無新異動事項。");
+        }
+    } catch (err) {
+        console.error("❌ 系統崩潰: " + err.stack);
+        sendToDiscord("❌ Ariel 系統發生嚴重錯誤，請檢查 Logs。");
+    }
+}
+
+function callGeminiAI(content) {
+    // 💡 這裡將模型改為 2.5-flash 以獲得更穩定的免費額度
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`;
+    const todayStr = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "yyyy/MM/dd HH:mm");
+    const prompt = `現在時間是 ${todayStr}。使用者是 ${CONFIG.USER_NAME}。請彙整以下新收到的行程與郵件，並以專業秘書 Ariel 的身分進行親切提醒（繁體中文）：\n${content}`;
+    
+    const payload = { "contents": [{ "parts": [{ "text": prompt }] }] };
+    const options = { 
+        "method": "post", 
+        "contentType": "application/json", 
+        "payload": JSON.stringify(payload), 
+        "muteHttpExceptions": true 
+    };
+
+    const response = UrlFetchApp.fetch(url, options);
+    const statusCode = response.getResponseCode();
+    const responseText = response.getContentText();
+    
+    if (statusCode !== 200) {
+        console.error(`[Gemini] API 錯誤回應: ${responseText}`);
+        throw new Error(`Gemini API HTTP ${statusCode}: ${responseText.substring(0, 100)}`);
+    }
+
+    const result = JSON.parse(responseText);
+    if (result.candidates && result.candidates[0].content) {
+        return result.candidates[0].content.parts[0].text;
+    }
+    throw new Error("Gemini API 回傳結構異常");
+}
+
+function sendToDiscord(message) {
+    UrlFetchApp.fetch(CONFIG.DISCORD_WEBHOOK_URL, {
+        "method": "post", "contentType": "application/json",
+        "payload": JSON.stringify({ "username": "Ariel 執行祕書", "content": message })
+    });
+}
+
+function setupTrigger() {
+    const triggers = ScriptApp.getProjectTriggers();
+    triggers.forEach(t => {
+        if (t.getHandlerFunction() === 'arielSentinel') {
+            ScriptApp.deleteTrigger(t);
+        }
+    });
+
+    ScriptApp.newTrigger('arielSentinel')
+        .timeBased()
+        .everyMinutes(10)
+        .create();
+    
+    console.log("✅ ArielOS 觸發器部署完成。");
+}

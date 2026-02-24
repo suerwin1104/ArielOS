@@ -23,6 +23,7 @@ class ArielAgentNode(discord.Client):
         self.agent_id = f"agent{_m.group(1).lower()}" if _m else AGENT_ID
         self.seen_events = set()
         self.seen_emails = set()
+        self.seen_news = set()
         self.announce_channel = None
         self._load_soul()
 
@@ -47,9 +48,11 @@ class ArielAgentNode(discord.Client):
                 if t: self.title = t.group(1).split('的')[-1].replace('*', '').strip()
                 c = re.search(r"稱呼您為.*?[「](.*?)[」]", text)
                 if c: self.call = c.group(1).strip()
-                # 寬鬆匹配: 處理 GAS\_URL, [url], <url> 等各種格式
-                g = re.search(r"(?i)GAS.*URL.*?(https?://[^\s<>\"'()\[\]]+)", text)
-                self.gas_url = g.group(1).strip() if g else None
+                # 寬鬆匹配: 尋找 script.google 相關網址作為 GAS_URL (支援 googleusercontent)
+                self.gas_url = None
+                gas_matches = re.findall(r"https?://script\.google(?:usercontent)?\.com/[^\s\"'\]\)]+", text)
+                if gas_matches:
+                    self.gas_url = gas_matches[0].strip()
                 # 讀取巡邏頻率
                 ci = re.search(r"巡邏頻率.*?[：:]\s*(\d+)", text)
                 if ci: self.check_interval = int(ci.group(1))
@@ -191,11 +194,20 @@ class ArielAgentNode(discord.Client):
                             sig = (e['subject'], e['date'])
                             current_emails.add(sig)
                             if sig not in self.seen_emails and self.seen_emails: # 非初次啟動才提醒
-                                new_msgs.append(f"📧 **新郵件**: [{e['author']}] {e['subject']}")
+                                new_msgs.append(f"📧 **新郵件**: [{e.get('author', '未知')}] {e['subject']}")
+
+                        # 檢查新新聞
+                        current_news = set()
+                        for n in data.get('news', []):
+                            sig = n['title']
+                            current_news.add(sig)
+                            if sig not in self.seen_news and self.seen_news: # 非初次啟動才提醒
+                                new_msgs.append(f"📰 **今日焦點**: {n['title']} ({n.get('date', '')[:10]})")
 
                         # 更新記憶
                         self.seen_events = current_events
                         self.seen_emails = current_emails
+                        self.seen_news = current_news
                         
                         # 發送通知
                         if new_msgs:
@@ -333,77 +345,12 @@ class ArielAgentNode(discord.Client):
         """背景處理 Bridge 通訊，確保不阻塞 Discord heartbeat"""
         try:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=480)) as sess:
-                # 🧠 Context Injection (GAS Read/Write)
-                context_data = ""
-                
-                # 1. 寫入偵測 (預約/安排)
-                start_match = re.search(r"(預約|安排|Book|新增行程)", message.content, re.IGNORECASE)
-                if self.gas_url and start_match:
-                    await status.edit(content=f"🧠 {self.name} 正在分析行程內容...")
-                    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    prompt = (
-                        f"SYSTEM_Instruction: You are an Event Parser. Current Time: {now_str}.\n"
-                        f"Extract event details from user input into JSON format.\n"
-                        f"Required fields: title, startTime (YYYY-MM-DD HH:mm), endTime (optional, default 1 hour later).\n"
-                        f"User Input: \"{message.content}\"\n"
-                        f"Output ONLY the JSON object string (e.g. {{\"title\": \"...\"}}), no markdown, no explanation."
-                    )
-                    
-                    # 呼叫 Bridge 解析 JSON
-                    payload = {"messages": [{"role": "user", "content": prompt}], "agent_id": self.agent_id}
-                    async with sess.post(self.bridge_url, json=payload) as resp:
-                        if resp.status == 200:
-                            data = await resp.json()
-                            raw_json = data.get('choices', [{}])[0].get('message', {}).get('content', '{}')
-                        elif resp.status == 202:
-                            # 處理佇列 (簡化版：通常 Parser 很快，若慢則略過)
-                            # 為求穩定，這裡假設 Parser 回應較快。若需佇列需複製 polling 邏輯。
-                            # 暫時跳過複雜Polling，假設 Bridge 能快速回應 Simple Request
-                            raw_json = "{}" 
-                        else:
-                            raw_json = "{}"
-
-                    # 清理 JSON
-                    try:
-                        json_str = re.search(r"\{.*\}", raw_json, re.DOTALL).group(0)
-                        event_data = json.loads(json_str)
-                    except:
-                        await status.edit(content=f"⚠️ 解析失敗，請確認格式 (例如：明天下午三點開會)")
-                        return
-
-                    if event_data.get("title") and event_data.get("startTime"):
-                        await status.edit(content=f"📝 正在寫入行程：{event_data['title']}...")
-                        res = await self.create_gas_event(event_data)
-                        if res and res.get("status") == "success":
-                            await status.edit(content=f"✅ **已預約成功！**\n📅 {event_data['startTime']} - {event_data['title']}")
-                        else:
-                            await status.edit(content=f"❌ 寫入失敗：{res.get('error') if res else 'Unknown'}")
-                    else:
-                        await status.edit(content=f"⚠️ 資訊不足，請包含標題與時間。")
-                    return # 結束，不繼續後面流程
-
-                # 2. 讀取偵測
-                if self.gas_url and any(k in message.content for k in ["行程", "Schedule", "信件", "Email", "行事曆"]):
-                    await status.edit(content=f"🔍 {self.name} 正在查詢您的行事曆...")
-                    gas_data = await self.fetch_gas_data()
-                    if gas_data and gas_data.get('status') == 'success':
-                        s_list = gas_data.get('schedule', [])
-                        schedule_text = "\n".join([f"- {s['time']} {s['title']}" for s in s_list]) if s_list else "(目前無近期行程)"
-                        e_list = gas_data.get('emails', [])
-                        email_text = "\n".join([f"- [{e['date']}] {e['subject']} (From: {e['from']})" for e in e_list]) if e_list else "(目前無未讀信件)"
-                        context_data = (
-                            f"\n[系統資訊 - GAS 資料]\n"
-                            f"擁有者: {gas_data.get('owner')}\n"
-                            f"今日: {gas_data.get('today')}\n"
-                            f"近期行程:\n{schedule_text}\n"
-                            f"未讀信件:\n{email_text}\n"
-                            f"[結束系統資訊]\n"
-                        )
-                
-                # 3. 標準對話流程
+                # 🧠 Context Injection: 已由 Central_Bridge Skill 接管，僅需在 Payload 附上金鑰
+                # 標準對話流程
                 payload = {
-                    "messages": [{"role": "user", "content": context_data + message.content}],
-                    "agent_id": self.agent_id
+                    "messages": [{"role": "user", "content": message.content}],
+                    "agent_id": self.agent_id,
+                    "gas_url": self.gas_url
                 }
                 
                 async with sess.post(self.bridge_url, json=payload) as resp:
